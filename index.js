@@ -1,94 +1,84 @@
-const loaderUtils = require("loader-utils");
+const { getOptions } = require('loader-utils')
+
+const { lexer, parser } = require('markdown2json_core')
 
 module.exports = function (source) {
-    return `export default ${JSON.stringify(run(source))}`;
+    const options = getOptions(this);
+    // 格式转换 --》 只包含基础类型
+    const dataType = options.data || {
+        value: Number
+    }
+
+    let tokens = lexer(source)
+    let ast = parser(tokens) || [{ node: [] }]
+    let rs
+    // ast 中,json 与table 只有一个
+    ast.forEach(({ type, node }) => {
+        if (type == 'json') {
+            rs = rs || {}
+            rs[node.key.trim()] = getJSON(node.table, dataType)
+        } else {
+            rs = getJSON(node, dataType)
+        }
+    })
+
+    return `export default ${JSON.stringify(rs)}`
 }
+function getJSON(rows = [], dataType) {
+    if (rows.length == 0) {
+        return {}
+    }
 
-function run(source) {
+    // 第一行为key,剩下的为value
+    let header = rows.shift().map(name => name.trim())
+    let rs = []
+    rows.forEach(row => {
+        let json = {}
+        header.forEach((headerName, i) => {
+            let v = row[i].trim()
+            if (v) {
+                // 类型转换
+                let type = dataType[headerName]
 
+                if (type === Boolean) {
+                    _.set(json, headerName, v != 'false')
+                } else if (type === Number) {
+                    _.set(json, headerName, Number(v))
+                } else if (type === Object) {
+                    try {
+                        value = new Function(`return ${v}`)()
+                        _.set(json, headerName, value)
+                    } catch (error) {
 
-    // 1. 根据:进行分组
-    let rows = source.split(/[(\r\n)\r\n]+/)
-    // 分组,table系列切割
-    let tables = [];
+                    }
 
-    let tableRows = [];
-
-    if (rows && rows.length > 0) {
-        rows.forEach(row => {
-            // 认为为key 行
-            if (row.match(/:\s*$/)) {
-                if (tableRows.length > 0) {
-                    tables.push(getColumns(tableRows))
+                } else {
+                    _.set(json, headerName, v)
                 }
-                tableRows = [row]
-            } else {
-                tableRows.push(row)
             }
         })
-    }
+        rs.push(json)
+    })
 
-    tables.push(getColumns(tableRows))
-
-    if (tables.length == 1 && !tables[0].key) {
-        return tables[0].value
-    } else {
-        let rs = {}
-        tables.forEach(({ key, value }) => {
-            rs[key] = value;
-        })
-        return rs;
-    }
-
-}
-
-function getColumns(arr) {
-    let firstText = arr[0].trim();
-    if (firstText.match(/:/)) {
-        return {
-            key: firstText.slice(0, -1),
-            value: _getColumns(arr.slice(1))
-        }
-    } else {
-        return {
-            value: _getColumns(arr)
-        }
-    }
+    return rs
 }
 
 
-function _getColumns(arr) {
 
-    let columns = []
+const _ = {
+    /**
+     * key 可以使用.进行对象属性设置
+     * data中key，不包含.
+     */
+    set(data, key = '', value) {
+        let arr = key.split('.');
+        let lastName = arr.pop();
 
-    // 1. 根据换行符切割,默认以第一行为准
-    arr
-        .map(rowText => rowText.trim())
-        // 去除左右|
-        .map(rowText => rowText.slice(1, -1))
-        .map(
-            rowText => rowText
-                .split(/\|/)
-                .map(cell => cell.trim())
-        )
-        .forEach(([key, ...values]) => {
-            values.forEach((value, i) => {
-                const column = columns[i] = columns[i] || {};
-                if (value != '') setColumns(column, key, value)
-            })
+        arr.forEach((name) => {
+            data && (data = data[name]);
         });
-
-    return columns
-}
-
-function setColumns(column, key, value) {
-    if (key == 'params') {
-        try {
-            value = new Function(`return ${value}`)()
-        } catch (error) {
-
+        if (data) {
+            data[lastName] = value;
         }
     }
-    column[key] = value
-
-}
+};

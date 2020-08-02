@@ -1,13 +1,17 @@
 {
-  "name": "columns-loader",
-  "version": "1.0.2",
+  "name": "markdown2json-loader",
+  "version": "0.0.2",
   "description": "",
   "main": "app.js",
   "scripts": {
-    "test": "node demo/index"
+    "test": "node demo/index",
+    "build": "npm publish"
   },
   "author": "glimis",
   "license": "ISC",
-  "dependencies": {},
+  "dependencies": {
+    "loader-utils": "^2.0.0",
+    "markdown2json_core": "0.0.6"
+  },
   "devDependencies": {}
 }
